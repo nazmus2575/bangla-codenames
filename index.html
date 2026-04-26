@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>বাংলা কোডনেমস — Bengali Codenames</title>
+  <meta name="description" content="The classic Codenames word game in Bengali. Play with friends across devices using a shared link or 6-character code." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🕵️%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🕵️</span>
+      <div class="brand-text">
+        <h1>বাংলা কোডনেমস</h1>
+        <p class="subtitle">Bengali Codenames</p>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="team-score red" id="red-score">
+        <span class="label">লাল দল</span>
+        <span class="count" id="red-count">9</span>
+      </div>
+      <div class="turn-indicator" id="turn-indicator">
+        <span id="turn-text">লাল দলের পালা</span>
+      </div>
+      <div class="team-score blue" id="blue-score">
+        <span class="label">নীল দল</span>
+        <span class="count" id="blue-count">8</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="new-game-btn" class="btn primary">নতুন খেলা</button>
+      <button id="spymaster-btn" class="btn secondary">গুপ্তচর প্রধান</button>
+      <button id="help-btn" class="btn ghost" aria-label="নিয়মাবলী">?</button>
+    </div>
+  </header>
+
+  <!-- Multiplayer / room bar -->
+  <section class="room-bar">
+    <div class="room-group code-group" title="এই খেলার কোড · This game's code">
+      <span class="room-label">কোড</span>
+      <span class="code" id="code-display">------</span>
+      <button class="btn small" id="copy-link-btn">🔗 লিঙ্ক কপি</button>
+    </div>
+    <div class="room-divider" aria-hidden="true"></div>
+    <div class="room-group join-group">
+      <span class="room-label">কোড দিয়ে যোগ দিন</span>
+      <input
+        id="join-code-input"
+        class="code-input"
+        type="text"
+        maxlength="6"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        placeholder="ABC123"
+        aria-label="Enter 6-character game code"
+      />
+      <button class="btn small secondary" id="join-btn">যোগ দিন</button>
+    </div>
+  </section>
+
+  <main>
+    <div class="board" id="board"></div>
+  </main>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Game over modal -->
+  <div class="modal-backdrop" id="gameover-modal" hidden>
+    <div class="modal">
+      <h2 id="gameover-title">খেলা শেষ</h2>
+      <p id="gameover-text"></p>
+      <button class="btn primary" id="gameover-newgame">আবার খেলুন</button>
+    </div>
+  </div>
+
+  <!-- Help / rules modal -->
+  <div class="modal-backdrop" id="help-modal" hidden>
+    <div class="modal help-modal">
+      <h2>নিয়মাবলী — How to play</h2>
+      <div class="rules">
+        <p><strong>কোডনেমস</strong> একটি দলগত শব্দের খেলা। দুটি দল — <span class="red-text">লাল</span> ও <span class="blue-text">নীল</span> — প্রতিযোগিতা করে।</p>
+        <ul>
+          <li>প্রতি দলে একজন <strong>গুপ্তচর প্রধান</strong> (Spymaster) থাকেন। তিনি বোর্ডের সকল শব্দের রং জানেন।</li>
+          <li>গুপ্তচর প্রধান একটি <strong>একক শব্দের সংকেত</strong> এবং একটি সংখ্যা দেন (যেমন: "ফল ৩")।</li>
+          <li>দলের অন্য সদস্যরা সেই সংকেত অনুসারে শব্দ অনুমান করে ক্লিক করেন।</li>
+          <li>নিজের দলের রঙের শব্দে ক্লিক করলে পয়েন্ট। অন্য দলের শব্দে ক্লিক করলে পালা শেষ।</li>
+          <li><strong>নিরপেক্ষ</strong> (ধূসর) শব্দে ক্লিক করলে পালা শেষ।</li>
+          <li><strong>আততায়ী</strong> (কালো) শব্দে ক্লিক করলে দল সাথে সাথে হেরে যায়।</li>
+          <li>যে দল প্রথম তাদের সব শব্দ খুঁজে পাবে — তারা বিজয়ী।</li>
+        </ul>
+
+        <h3 class="rules-subhead">📱 একাধিক ডিভাইসে খেলা · Playing on multiple devices</h3>
+        <ul>
+          <li>"নতুন খেলা" চাপলে একটি ৬-অক্ষরের <strong>কোড</strong> তৈরি হয় (যেমন <code>K7M2QX</code>)।</li>
+          <li><strong>"🔗 লিঙ্ক কপি"</strong> চাপুন এবং বন্ধুদের পাঠান। তারা লিঙ্ক খুললেই একই ২৫টি শব্দ ও একই রঙের সাজানো বোর্ড পাবেন।</li>
+          <li>অথবা শুধু কোডটি বলুন — অন্যরা "কোড দিয়ে যোগ দিন" বাক্সে টাইপ করলেই হবে।</li>
+          <li>প্রতিটি গুপ্তচর প্রধান <strong>নিজের ডিভাইসে</strong> "গুপ্তচর প্রধান" বোতাম চাপলে শুধু তিনিই রং দেখতে পান — অন্যদের গোপনীয়তা বজায় থাকে।</li>
+          <li>কথা বলে বা ভিডিও কলে সংকেত দিন। ক্লিকগুলো নিজের ডিভাইসে আলাদা — দলের লোকেরা ঠিক করে নিন কে ক্লিক করবেন।</li>
+        </ul>
+
+        <p class="tip">💡 একই কোড = একই বোর্ড সবার জন্য, যেকোনো ডিভাইসে, যেকোনো জায়গায়।</p>
+      </div>
+      <button class="btn primary" id="help-close">বুঝেছি</button>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span>একাধিক ডিভাইসে খেলুন · Share the link or code to play across devices</span>
+  </footer>
+
+  <script src="words.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
