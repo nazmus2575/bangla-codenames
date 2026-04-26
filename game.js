@@ -1,5 +1,19 @@
 /* ============================================================
- * Bengali Codenames — game logic
+ * Bengali Codenames — game logic with shared-link multiplayer
+ * ============================================================
+ * Each game has a 6-char code (e.g. "K7M2QX"). The code seeds
+ * a deterministic PRNG so anyone with the same code — on any
+ * device, anywhere — sees the exact same 25 words and the
+ * exact same color key.
+ *
+ * The code is also stored in the URL (?game=K7M2QX) so a
+ * shared link is enough — recipients don't need to type
+ * anything.
+ *
+ * Card clicks are local to each device so the spymaster's
+ * private view stays private. Players coordinate by speaking
+ * to each other (in person, voice/video call) like in real
+ * Codenames.
  * ============================================================ */
 
 (function () {
@@ -11,6 +25,8 @@
   const TYPE_BLUE = 'blue';
   const TYPE_NEUTRAL = 'neutral';
   const TYPE_ASSASSIN = 'assassin';
+  const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
+  const CODE_LENGTH = 6;
 
   // ----- DOM -----
   const boardEl = document.getElementById('board');
@@ -30,38 +46,99 @@
   const gameoverText = document.getElementById('gameover-text');
   const gameoverNewGameBtn = document.getElementById('gameover-newgame');
 
+  // Multiplayer DOM
+  const codeDisplayEl = document.getElementById('code-display');
+  const copyLinkBtn = document.getElementById('copy-link-btn');
+  const joinCodeInput = document.getElementById('join-code-input');
+  const joinBtn = document.getElementById('join-btn');
+  const toastEl = document.getElementById('toast');
+
   // ----- State -----
-  let cards = [];          // [{ word, type, revealed }]
+  let cards = [];
   let firstTeam = TYPE_RED;
   let currentTurn = TYPE_RED;
   let redRemaining = 0;
   let blueRemaining = 0;
   let spymasterMode = false;
   let gameOver = false;
+  let currentCode = '';
 
-  // ----- Helpers -----
-  function shuffle(arr) {
+  // ============================================================
+  // Seeded PRNG — Mulberry32. Deterministic, fast, browser-safe.
+  // Same seed → same sequence on any device.
+  // ============================================================
+  function seedFromCode(code) {
+    // FNV-1a-like hash → 32-bit unsigned integer
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < code.length; i++) {
+      h ^= code.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function makeRng(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function shuffleSeeded(arr, rng) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rng() * (i + 1));
       [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
   }
 
-  function pickWords() {
-    const pool = (typeof BENGALI_WORDS !== 'undefined' ? BENGALI_WORDS : (typeof UNIQUE_WORDS !== 'undefined' ? UNIQUE_WORDS : []));
-    // words.js exports `UNIQUE_WORDS` to module.exports but for browser use BENGALI_WORDS-derived constant directly.
-    // We re-derive a unique list at runtime for safety.
-    const unique = [...new Set(pool)];
-    return shuffle(unique).slice(0, GRID_SIZE);
+  // ----- Code generation -----
+  function generateCode() {
+    let code = '';
+    const arr = new Uint32Array(CODE_LENGTH);
+    crypto.getRandomValues(arr);
+    for (let i = 0; i < CODE_LENGTH; i++) {
+      code += CODE_ALPHABET[arr[i] % CODE_ALPHABET.length];
+    }
+    return code;
   }
 
-  function buildKey() {
-    // Standard Codenames distribution: 9-8-7-1 (first team gets 9)
-    firstTeam = Math.random() < 0.5 ? TYPE_RED : TYPE_BLUE;
+  function normalizeCode(input) {
+    if (!input) return '';
+    return String(input).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+  }
+
+  function isValidCode(code) {
+    if (!code || code.length !== CODE_LENGTH) return false;
+    for (const ch of code) {
+      if (!CODE_ALPHABET.includes(ch)) return false;
+    }
+    return true;
+  }
+
+  // ============================================================
+  // Build a board deterministically from a code.
+  // Same code → identical 25 words, identical colors, identical
+  // first-team — on every device.
+  // ============================================================
+  function buildGameFromCode(code) {
+    const rng = makeRng(seedFromCode(code));
+    const pool = [...new Set(BENGALI_WORDS)];
+
+    // 1. Pick 25 unique words, deterministically
+    const words = shuffleSeeded(pool, rng).slice(0, GRID_SIZE);
+
+    // 2. Decide first team deterministically from the same RNG
+    const first = rng() < 0.5 ? TYPE_RED : TYPE_BLUE;
+
+    // 3. Build the color key with the right distribution
     const types = [];
-    if (firstTeam === TYPE_RED) {
+    if (first === TYPE_RED) {
       for (let i = 0; i < 9; i++) types.push(TYPE_RED);
       for (let i = 0; i < 8; i++) types.push(TYPE_BLUE);
     } else {
@@ -70,18 +147,26 @@
     }
     for (let i = 0; i < 7; i++) types.push(TYPE_NEUTRAL);
     types.push(TYPE_ASSASSIN);
-    return shuffle(types);
+
+    // 4. Shuffle types deterministically
+    const shuffledTypes = shuffleSeeded(types, rng);
+
+    return {
+      first,
+      cards: words.map((word, i) => ({
+        word,
+        type: shuffledTypes[i],
+        revealed: false,
+      })),
+    };
   }
 
   // ----- New game -----
-  function newGame() {
-    const words = pickWords();
-    const key = buildKey();
-    cards = words.map((word, i) => ({
-      word,
-      type: key[i],
-      revealed: false,
-    }));
+  function startGame(code) {
+    currentCode = code;
+    const built = buildGameFromCode(code);
+    cards = built.cards;
+    firstTeam = built.first;
     redRemaining = cards.filter(c => c.type === TYPE_RED).length;
     blueRemaining = cards.filter(c => c.type === TYPE_BLUE).length;
     currentTurn = firstTeam;
@@ -90,8 +175,21 @@
     spymasterBtn.classList.remove('active');
     spymasterBtn.textContent = 'গুপ্তচর প্রধান';
     gameoverModal.hidden = true;
+
+    // Reflect code in URL (without page reload)
+    const url = new URL(window.location.href);
+    url.searchParams.set('game', code);
+    window.history.replaceState({}, '', url.toString());
+
+    // Update code display
+    if (codeDisplayEl) codeDisplayEl.textContent = code;
+
     render();
     updateStatus();
+  }
+
+  function newGame() {
+    startGame(generateCode());
   }
 
   // ----- Render -----
@@ -134,14 +232,13 @@
   // ----- Click handling -----
   function onCardClick(idx) {
     if (gameOver) return;
-    if (spymasterMode) return; // spymaster view is read-only
+    if (spymasterMode) return;
     const card = cards[idx];
     if (card.revealed) return;
 
     card.revealed = true;
 
     if (card.type === TYPE_ASSASSIN) {
-      // Current team loses
       const winner = currentTurn === TYPE_RED ? TYPE_BLUE : TYPE_RED;
       endGame(winner, 'assassin');
       render();
@@ -157,7 +254,6 @@
       if (blueRemaining === 0) { endGame(TYPE_BLUE, 'cleared'); render(); return; }
       if (currentTurn !== TYPE_BLUE) endTurn();
     } else {
-      // neutral
       endTurn();
     }
 
@@ -192,6 +288,51 @@
     render();
   }
 
+  // ----- Toast -----
+  let toastTimer = null;
+  function showToast(message) {
+    if (!toastEl) return;
+    toastEl.textContent = message;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  // ----- Copy link -----
+  async function copyShareLink() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('game', currentCode);
+    const link = url.toString();
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('লিঙ্ক কপি হয়েছে · Link copied');
+    } catch (_) {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('লিঙ্ক কপি হয়েছে · Link copied'); }
+      catch (_) { showToast('কপি করা যায়নি'); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  // ----- Join by code -----
+  function joinByCode() {
+    const raw = joinCodeInput ? joinCodeInput.value : '';
+    const code = normalizeCode(raw);
+    if (!isValidCode(code)) {
+      showToast('সঠিক ৬-অক্ষরের কোড দিন');
+      return;
+    }
+    startGame(code);
+    if (joinCodeInput) joinCodeInput.value = '';
+    showToast('খেলায় যোগ দিয়েছেন');
+  }
+
   // ----- Wire up -----
   newGameBtn.addEventListener('click', newGame);
   gameoverNewGameBtn.addEventListener('click', newGame);
@@ -199,22 +340,48 @@
   helpBtn.addEventListener('click', () => { helpModal.hidden = false; });
   helpCloseBtn.addEventListener('click', () => { helpModal.hidden = true; });
 
-  // Click outside modals to close (help only)
   helpModal.addEventListener('click', (e) => {
     if (e.target === helpModal) helpModal.hidden = true;
   });
 
-  // Keyboard: N for new game, S to toggle spymaster, Esc to close modal
+  if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyShareLink);
+  if (joinBtn) joinBtn.addEventListener('click', joinByCode);
+  if (joinCodeInput) {
+    joinCodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinByCode();
+    });
+    joinCodeInput.addEventListener('input', () => {
+      // Auto-uppercase as the user types
+      const cur = joinCodeInput.value;
+      const norm = normalizeCode(cur);
+      if (cur !== norm) joinCodeInput.value = norm;
+    });
+  }
+
   document.addEventListener('keydown', (e) => {
+    const inField = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
     if (e.key === 'Escape') {
       helpModal.hidden = true;
-    } else if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey) {
-      newGame();
-    } else if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey) {
-      toggleSpymaster();
+      return;
     }
+    if (inField) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key.toLowerCase() === 'n') newGame();
+    else if (e.key.toLowerCase() === 's') toggleSpymaster();
   });
 
-  // First game
-  newGame();
+  // ============================================================
+  // Bootstrap — read ?game=CODE from URL, otherwise new game
+  // ============================================================
+  function init() {
+    const params = new URLSearchParams(window.location.search);
+    const urlCode = normalizeCode(params.get('game'));
+    if (isValidCode(urlCode)) {
+      startGame(urlCode);
+    } else {
+      newGame();
+    }
+  }
+
+  init();
 })();

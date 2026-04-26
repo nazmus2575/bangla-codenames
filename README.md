@@ -9,9 +9,10 @@ Pure HTML/CSS/JavaScript — no build step, no dependencies. Runs anywhere stati
 
 ## ✨ Features
 
+- 🔗 **Cross-device multiplayer via shared link** — every game has a 6-character code (e.g. `K7M2QX`). Anyone who opens the link `?game=K7M2QX` sees the **exact same 25 words and the exact same color key**, on any device, anywhere in the world. **No server, no signup, no backend.**
+- 🕵️ **Private spymaster view** — each player toggles spymaster on their own device, so colors stay secret from teammates.
 - 🎴 **25-card grid** with the standard 9 / 8 / 7 / 1 distribution.
 - 🔴🔵 **Two teams** (লাল & নীল) with turn tracking and live scores.
-- 🕵️ **Spymaster mode** — toggle to reveal the colour key on the same device.
 - ☠️ **Assassin card** — one wrong click and the game ends instantly.
 - 📚 **451 standard Bengali words** — common, concrete nouns curated for clue-giving (nature, animals, food, body, household, places, transport, etc.).
 - 📱 **Fully responsive** — works on phones, tablets, and desktops.
@@ -31,7 +32,24 @@ Two teams (Red and Blue) compete. Each team picks a **Spymaster** who can see th
 
 The first team to find all their agents wins.
 
-> 💡 Tip: This is a **pass-and-play** game on one device. When the spymaster view is on, only the spymaster should look at the screen.
+## 📱 Playing across multiple devices
+
+This is what makes the game work for remote groups, video calls, or any setting where one shared screen isn't ideal:
+
+1. **Host** opens the site and clicks **নতুন খেলা** (New game). A 6-character code appears in the top bar (e.g. `K7M2QX`).
+2. The host clicks **🔗 লিঙ্ক কপি (Copy link)** and pastes it into the group chat — *or* just tells everyone the 6-character code.
+3. Everyone else either:
+   - Clicks the link → joins instantly.
+   - Or types the code into the **"কোড দিয়ে যোগ দিন"** box → joins.
+4. Now **everyone sees the same 25 words in the same positions**.
+5. Each spymaster privately presses the **গুপ্তচর প্রধান (Spymaster)** button on their own device — only they see the colors.
+6. Players coordinate by talking (in person, voice or video call) just like real Codenames. Card clicks are local to each device, so the team agrees out loud who taps the guess.
+
+### How does this work without a server?
+
+The 6-character code is a **deterministic seed**. The same code always generates the same board — the same word order, the same colors, the same starting team — using a cryptographic-quality pseudo-random number generator (Mulberry32 with FNV-1a hashing). No data is sent anywhere; the board is rebuilt locally on each device from the code alone. This is why the game runs perfectly on a free static host like GitHub Pages.
+
+> 💡 Bonus: you can also play **pass-and-play on one device** — just hand the phone around between turns.
 
 ---
 
