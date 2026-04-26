@@ -350,12 +350,6 @@
     joinCodeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') joinByCode();
     });
-    joinCodeInput.addEventListener('input', () => {
-      // Auto-uppercase as the user types
-      const cur = joinCodeInput.value;
-      const norm = normalizeCode(cur);
-      if (cur !== norm) joinCodeInput.value = norm;
-    });
   }
 
   document.addEventListener('keydown', (e) => {
